@@ -10,6 +10,7 @@
 
 import os
 from glob import glob
+from pathlib import Path
 
 import numpy as np
 import PIL
@@ -48,7 +49,9 @@ class PupilDataset(Dataset):
         else:
             self.metadata = np.loadtxt(os.path.join(root, f'{metadata}.txt'), dtype=str)
 
-        self.img_paths = [sorted(glob(os.path.join(root, dir, '*.jpg'))) for dir in self.metadata]
+        self.img_paths = [
+            sorted(glob(os.path.join(root, dir, '*.jpg')), key=lambda x: int(Path(x).stem)) for dir in self.metadata
+        ]
         self.cnts = np.cumsum([0] + [len(img_paths) for img_paths in self.img_paths])
 
         if self.split != 'test':
