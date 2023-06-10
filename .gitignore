@@ -1,0 +1,9 @@
+__pycache__/
+
+output_dir/
+logs/
+
+data/
+solution/
+*.pth
+*.zip
