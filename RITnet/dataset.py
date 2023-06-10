@@ -20,56 +20,37 @@ Train Image Augmentation Procedure Followed
 5) Translation of image and labels in any direction with random factor less than 20.
 """
 
+import copy
+import os
+import random
+from glob import glob
+from pathlib import Path
+
+import cv2
 import numpy as np
 import torch
-from torch.utils.data import Dataset 
-import os
+import torchvision.transforms.functional as TF
 from PIL import Image
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-import cv2
-import random
-import os.path as osp
-from utils import one_hot2dist
-import copy
 
 transform = transforms.Compose(
     [transforms.ToTensor(),
      transforms.Normalize([0.5], [0.5])])
   
-#%%
 class RandomHorizontalFlip(object):
     def __call__(self, img,label):
         if random.random() < 0.5:
             return img.transpose(Image.FLIP_LEFT_RIGHT),\
                         label.transpose(Image.FLIP_LEFT_RIGHT)
         return img,label
-    
-class Starburst_augment(object):
-    ## We have generated the starburst pattern from a train image 000000240768.png
-    ## Please follow the file Starburst_generation_from_train_image_000000240768.pdf attached in the folder 
-    ## This procedure is used in order to handle people with multiple reflections for glasses
-    ## a random translation of mask of starburst pattern
-    def __call__(self, img):
-        x=np.random.randint(1, 40)
-        y=np.random.randint(1, 40)
-        mode = np.random.randint(0, 2)
-        starburst=Image.open('starburst_black.png').convert("L")
-        if mode == 0:
-            starburst = np.pad(starburst, pad_width=((0, 0), (x, 0)), mode='constant')
-            starburst = starburst[:, :-x]
-        if mode == 1:
-            starburst = np.pad(starburst, pad_width=((0, 0), (0, x)), mode='constant')
-            starburst = starburst[:, x:]
-
-        img[92+y:549+y,0:400]=np.array(img)[92+y:549+y,0:400]*((255-np.array(starburst))/255)+np.array(starburst)
-        return Image.fromarray(img)
 
 def getRandomLine(xc, yc, theta):
     x1 = xc - 50*np.random.rand(1)*(1 if np.random.rand(1) < 0.5 else -1)
     y1 = (x1 - xc)*np.tan(theta) + yc
     x2 = xc - (150*np.random.rand(1) + 50)*(1 if np.random.rand(1) < 0.5 else -1)
     y2 = (x2 - xc)*np.tan(theta) + yc
-    return x1, y1, x2, y2
+    return map(int, (x1, y1, x2, y2))
 
 class Gaussian_blur(object):
     def __call__(self, img):
@@ -121,50 +102,54 @@ class MaskToTensor(object):
         return torch.from_numpy(np.array(img, dtype=np.int32)).long()       
 
   
-class IrisDataset(Dataset):
-    def __init__(self, filepath, split='train',transform=None,**args):
-        self.transform = transform
-        self.filepath= osp.join(filepath,split)
-        self.split = split
-        listall = []
-        
-        for file in os.listdir(osp.join(self.filepath,'images')):   
-            if file.endswith(".png"):
-               listall.append(file.strip(".png"))
-        self.list_files=listall
-
-        self.testrun = args.get('testrun')
-        
+class PupilDataset(Dataset):
+    def __init__(self, root, split='train', transform=transform, metadata=None, **args):
+    
         #PREPROCESSING STEP FOR ALL TRAIN, VALIDATION AND TEST INPUTS 
         #local Contrast limited adaptive histogram equalization algorithm
         self.clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8,8))
+        self.table = 255.0*(np.linspace(0, 1, 256)**0.8)
+
+
+        assert split in ('train', 'val', 'test')
+        self.root = root
+        self.split = split
+        self.transform = transform
+        
+        if metadata is None:
+            if split == 'train' or split == 'val':
+                self.metadata = np.loadtxt(os.path.join(root, f'metadata_{split}.txt'), dtype=str)
+            elif split == 'test':
+                self.metadata = sorted(glob(os.path.join(root, '*',  '*')))
+                self.metadata = [os.path.join(*dir.split('/')[-2:]) for dir in self.metadata if os.path.isdir(dir)]
+        else:
+            self.metadata = np.loadtxt(os.path.join(root, f'{metadata}.txt'), dtype=str)
+
+        self.img_paths = [sorted(glob(os.path.join(root, dir, '*.jpg')), key=lambda x: int(Path(x).stem)) for dir in self.metadata]
+        self.cnts = np.cumsum([0] + [len(img_paths) for img_paths in self.img_paths])
 
     def __len__(self):
-        if self.testrun:
-            return 10
-        return len(self.list_files)
+        return self.cnts[-1]
 
     def __getitem__(self, idx):
-        imagepath = osp.join(self.filepath,'images',self.list_files[idx]+'.png')
-        pilimg = Image.open(imagepath).convert("L")
-        H, W = pilimg.width , pilimg.height
-       
+        chunk_idx = np.searchsorted(self.cnts, idx, side='right') - 1
+        subidx = idx - self.cnts[chunk_idx]
+
+        pilimg = Image.open(self.img_paths[chunk_idx][subidx]) # grayscale
+        # resize to 240, 320
+        pilimg = pilimg.resize((320, 240), resample=1) # Resampling.LANCZOS
+
         #PREPROCESSING STEP FOR ALL TRAIN, VALIDATION AND TEST INPUTS 
         #Fixed gamma value for      
-        table = 255.0*(np.linspace(0, 1, 256)**0.8)
-        pilimg = cv2.LUT(np.array(pilimg), table)
-        
+        pilimg = cv2.LUT(np.array(pilimg), self.table)
 
         if self.split != 'test':
-            labelpath = osp.join(self.filepath,'labels',self.list_files[idx]+'.npy')
-            label = np.load(labelpath)    
-            label = np.resize(label,(W,H))
-            label = Image.fromarray(label)     
-               
+            label = Image.open(self.img_paths[chunk_idx][subidx].replace('jpg', 'png')).convert('L')
+            # let where label!=0 be 2 (pupil in RITnet_v3)
+            label = label.point(lambda x: 2 if x != 0 else 0)
+
         if self.transform is not None:
             if self.split == 'train':
-                if random.random() < 0.2: 
-                    pilimg = Starburst_augment()(np.array(pilimg))  
                 if random.random() < 0.2: 
                     pilimg = Line_augment()(np.array(pilimg))    
                 if random.random() < 0.2:
@@ -178,6 +163,9 @@ class IrisDataset(Dataset):
         if self.transform is not None:
             if self.split == 'train':
                 img, label = RandomHorizontalFlip()(img,label)
+            elif self.split == 'test':
+                img = TF.adjust_brightness(img, 1.5)
+                img = TF.adjust_contrast(img, 0.5)
             img = self.transform(img)    
 
 
@@ -188,26 +176,34 @@ class IrisDataset(Dataset):
             
             ##This is the implementation for the surface loss
             # Distance map for each class
-            distMap = []
-            for i in range(0, 4):
-                distMap.append(one_hot2dist(np.array(label)==i))
-            distMap = np.stack(distMap, 0)           
-#            spatialWeights=np.float32(distMap) 
-            
-            
+            # distMap = np.stack([one_hot2dist(np.array(label)==i) for i in range(0, 3)], 0)           
+        
+        img_name = '-'.join(self.img_paths[chunk_idx][subidx].split('/')[-3:])[:-4]
+
         if self.split == 'test':
             ##since label, spatialWeights and distMap is not needed for test images
-            return img,0,self.list_files[idx],0,0
+            return img,0,img_name,0,0
             
         label = MaskToTensor()(label)
-        return img, label, self.list_files[idx],spatialWeights,np.float32(distMap) 
+        return img, label, img_name,spatialWeights, 0 #np.float32(distMap) 
+    
+
+def build_dataloader():
+    training_root = '/mnt/191/a/ycc/CV_Final/data/trainset'
+    train_dataset = PupilDataset(training_root, 'train', transform=transform)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=True, num_workers=8, drop_last=True)
+
+    val_dataset = PupilDataset(training_root, 'val', transform=transform)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, pin_memory=True, num_workers=8)
+
+    testing_root = '/mnt/191/a/ycc/CV_Final/data/testset'
+    test_dataset = PupilDataset(testing_root, 'test', transform=transform)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=8)
+    return train_loader, val_loader, test_loader
+
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    ds = IrisDataset('Semantic_Segmentation_Dataset',split='train',transform=transform)
-#    for i in range(1000):
-    img, label, idx,x,y= ds[0]
-    plt.subplot(121)
-    plt.imshow(np.array(label))
-    plt.subplot(122)
-    plt.imshow(np.array(img)[0,:,:],cmap='gray')
+    train_loader, _, testloader = build_dataloader()
+    for batch in train_loader:
+        print(len(batch))
+        import ipdb; ipdb.set_trace()

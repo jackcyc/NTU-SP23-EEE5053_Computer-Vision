@@ -72,7 +72,7 @@ class GeneralizedDiceLoss(nn.Module):
     def forward(self, ip, target):
 
         # Rapid way to convert to one-hot. For future version, use functional
-        Label = (np.arange(4) == target.cpu().numpy()[..., None]).astype(np.uint8)
+        Label = (np.arange(3) == target.cpu().numpy()[..., None]).astype(np.uint8)
         target = torch.from_numpy(np.rollaxis(Label, 3,start=1)).cuda()
 
         assert ip.shape == target.shape
@@ -103,7 +103,7 @@ def one_hot2dist(posmask):
     assert len(posmask.shape) == 2
     h, w = posmask.shape
     res = np.zeros_like(posmask)
-    posmask = posmask.astype(np.bool)
+    posmask = posmask.astype(bool)
     mxDist = np.sqrt((h-1)**2 + (w-1)**2)
     if posmask.any():
         negmask = ~posmask
@@ -111,10 +111,10 @@ def one_hot2dist(posmask):
     return res/mxDist
 
 def mIoU(predictions, targets,info=False):  ###Mean per class accuracy
-    unique_labels = np.unique(targets)
-    num_unique_labels = len(unique_labels)
+    unique_labels = np.unique(targets).astype(np.int64)
+    # num_unique_labels = len(unique_labels)
     ious = []
-    for index in range(num_unique_labels):
+    for index in unique_labels:
         pred_i = predictions == index
         label_i = targets == index
         intersection = np.logical_and(label_i, pred_i)
