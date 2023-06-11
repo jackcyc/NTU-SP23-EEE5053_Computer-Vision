@@ -189,14 +189,14 @@ class PupilDataset(Dataset):
     
 
 def build_dataloader():
-    training_root = '/mnt/191/a/ycc/CV_Final/data/trainset'
+    training_root = '../data/trainset'
     train_dataset = PupilDataset(training_root, 'train', transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=True, num_workers=8, drop_last=True)
 
     val_dataset = PupilDataset(training_root, 'val', transform=transform)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, pin_memory=True, num_workers=8)
 
-    testing_root = '/mnt/191/a/ycc/CV_Final/data/testset'
+    testing_root = '../data/testset'
     test_dataset = PupilDataset(testing_root, 'test', transform=transform)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=8)
     return train_loader, val_loader, test_loader
