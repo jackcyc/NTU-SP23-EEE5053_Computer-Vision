@@ -75,7 +75,7 @@ def postprocess(solution_path: str):
             sizes.append(size)
             invalids.append(invalid)
 
-        # Post-processing: set must-be-zero confidence to zero
+        # Post-processing1: set must-be-zero confidence to zero
         sizes = np.array(sizes, dtype=np.float32)
         invalids = np.array(invalids, dtype=np.int8)
 
@@ -83,6 +83,11 @@ def postprocess(solution_path: str):
         sizes[sizes < 0.5 * median_pupil_size] = 0
         zero_conf_idx = np.where(np.logical_and(sizes == 0, invalids == 1))[0]
         confidence[zero_conf_idx] = 0
+
+        # Post-processing2: clip confident prediction 
+        confidence[confidence>0.75] = 1
+        confidence[confidence<0.25] = 0
+
         np.savetxt(os.path.join(d, 'conf.txt'), confidence, fmt='%.4f')
 
 if __name__ == '__main__':
