@@ -104,7 +104,7 @@ def inference(model, testloader, device, output_dir):
         # save results for submission
         for j in range(len(index)):
             S, d, f = index[j].split('-')
-            dir = os.path.join(output_dir, S, d)
+            dir = os.path.join(output_dir, 'solution', S, d)
             os.makedirs(dir, exist_ok=True)
 
             Image.fromarray((pred_map[j] * 255).astype(np.uint8)).save(os.path.join(dir, f'{int(f)}.png'))

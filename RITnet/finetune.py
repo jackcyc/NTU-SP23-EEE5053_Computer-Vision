@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
     device = torch.device("cuda")
 
-    LOGDIR = 'logs/{}'.format(args.expname)
+    LOGDIR = '{}'.format(args.expname)
     os.makedirs(LOGDIR, exist_ok=True)
     os.makedirs(LOGDIR + '/models', exist_ok=True)
     logger = Logger(os.path.join(LOGDIR, 'logs.log'))
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     model.train()
     nparams = get_nparams(model)
 
-    trainloader, validloader, testloader = build_dataloader()
+    trainloader, validloader = build_dataloader(args.data_path)
 
     optimizer = torch.optim.Adam([
         {

@@ -188,22 +188,19 @@ class PupilDataset(Dataset):
         return img, label, img_name,spatialWeights, 0 #np.float32(distMap) 
     
 
-def build_dataloader():
-    training_root = '../data/trainset'
+def build_dataloader(root):
+    training_root = root # '../data/trainset'
     train_dataset = PupilDataset(training_root, 'train', transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=True, num_workers=8, drop_last=True)
 
     val_dataset = PupilDataset(training_root, 'val', transform=transform)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, pin_memory=True, num_workers=8)
 
-    testing_root = '../data/testset'
-    test_dataset = PupilDataset(testing_root, 'test', transform=transform)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=8)
-    return train_loader, val_loader, test_loader
+    return train_loader, val_loader
 
 
 if __name__ == "__main__":
-    train_loader, _, testloader = build_dataloader()
+    train_loader, _, testloader = build_dataloader('../data/trainset')
     for batch in train_loader:
         print(len(batch))
         import ipdb; ipdb.set_trace()

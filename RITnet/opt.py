@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('--testrun', action='store_true', help='test run with few dataset')
     parser.add_argument('--expname', type=str, default='info', help='extra explanation of the method')
     parser.add_argument('--useGPU', type=str, default=True, help='Set it as False if GPU is unavailable')
+    parser.add_argument('--data_path', type=str, default='../data/trainset', help='Training data directory')
    
     # parse 
     args = parser.parse_args()
