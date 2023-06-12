@@ -3,8 +3,14 @@
 ## Environment
 * OS: Ubuntu 20.04
 * GPU: NVIDIA GeForce RTX 3090 *2
+* Python 3.10
+* PyTorch 2
 * Create conda environment
-    * `conda create --name <env> --file requirements.txt`
+    ```shell
+    conda create -n <env_name> python=3.10
+    conda activate <env_name>
+    python -m pip install -r requirements.txt
+    ```
 
 ## Inference
 ```bash inference.sh <IMG_DIR> <OUTPUT_DIR>```
@@ -84,6 +90,6 @@ cp mae/<OUTPUT_DIR>/models/dense_net249.pkl rit.pkl
 
 
 # Collaborators
-* [crydaniel1203-bit](https://github.com/crydaniel1203-bit)
+* [cnx1203](https://github.com/cnx1203)
 * [jackcyc](https://github.com/jackcyc)
 * [tuchin32](https://github.com/tuchin32)
