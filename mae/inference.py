@@ -64,7 +64,7 @@ def main():
     cnts = dataset.cnts
     metadata = dataset.metadata
 
-    subdirs = [os.path.join(output_dir, dir) for dir in metadata]
+    subdirs = [os.path.join(output_dir, 'solution', dir) for dir in metadata]
 
     assert cnts[-1] == len(confs), 'cnts[-1] != len(confs)'
     for i, (start, end) in enumerate(zip(cnts[:-1], cnts[1:])):

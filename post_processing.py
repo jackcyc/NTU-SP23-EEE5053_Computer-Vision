@@ -54,7 +54,7 @@ def find_closed_eye(image: np.ndarray):
             return np.mean(img1), False
 
 def postprocess(solution_path: str):
-    d_dir = sorted(glob.glob(os.path.join(solution_path, 'S*', '*')),
+    d_dir = sorted(glob.glob(os.path.join(solution_path, 'solution', 'S*', '*')),
                     key=lambda x: int(x.split('/')[-2][-1]) * 100 + int(x.split('/')[-1]))
 
     pbar = tqdm(d_dir)
