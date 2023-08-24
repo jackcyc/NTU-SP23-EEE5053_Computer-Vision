@@ -7,6 +7,7 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 from PIL import Image
 
+
 def get_dataloader(dataset_dir, batch_size=1, split='test'):
     ###############################
     # TODO:                       #
@@ -14,24 +15,28 @@ def get_dataloader(dataset_dir, batch_size=1, split='test'):
     ###############################
     if split == 'train':
         transform = transforms.Compose([
-            transforms.Resize((32,32)),
             ##### TODO: Data Augmentation Begin #####
-           
-            ##### TODO: Data Augmentation End #####
+            transforms.Resize((128, 128)),
+            transforms.RandomCrop((112, 112)),
+            transforms.TrivialAugmentWide(),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.RandomErasing(),
+            ##### TODO: Data Augmentation End #####
         ])
     else: # 'val' or 'test'
         transform = transforms.Compose([
-            transforms.Resize((32,32)),
+            transforms.Resize((128, 128)),
             # we usually don't apply data augmentation on test or val data
+            transforms.CenterCrop((112, 112)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
     dataset = CIFAR10Dataset(dataset_dir, split=split, transform=transform)
 
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=(split=='train'), num_workers=0, pin_memory=True, drop_last=(split=='train'))
+    n_cpu = torch.get_num_threads() if torch.get_num_threads() > 8 else 0
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=(split=='train'), num_workers=n_cpu, pin_memory=True, drop_last=(split=='train'))
 
     return dataloader
 
@@ -70,9 +75,15 @@ class CIFAR10Dataset(Dataset):
         # You will not have labels if it's test set            #
         ########################################################
 
-        pass
+        image = Image.open(os.path.join(self.dataset_dir, self.image_names[index]))
+        image = self.transform(image)
+        if self.split != 'test':
+            return {
+                'images': image, 
+                'labels': self.labels[index]
+            }
+        else:
+            return {
+                'images': image
+            }
 
-        # return {
-        #     'images': image, 
-        #     'labels': label
-        # }

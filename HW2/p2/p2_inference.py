@@ -57,6 +57,11 @@ def main():
         # You don't have to calculate accuracy and loss since you   #
         # don't have labels.                                        #
         #############################################################
+        for i, data in enumerate(test_loader):
+            images = data['images'].to(device)
+            outputs = model(images)
+            predicted = torch.argmax(outputs, dim=1)
+            predictions.append(predicted.item())
         
         ######################### TODO End ##########################
 

@@ -5,6 +5,8 @@ from cyvlfeat.sift.dsift import dsift
 from cyvlfeat.kmeans import kmeans
 from scipy.spatial.distance import cdist
 
+import cv2
+
 CAT = ['Kitchen', 'Store', 'Bedroom', 'LivingRoom', 'Office',
        'Industrial', 'Suburb', 'InsideCity', 'TallBuilding', 'Street',
        'Highway', 'OpenCountry', 'Coast', 'Mountain', 'Forest']
@@ -43,6 +45,17 @@ def get_tiny_images(img_paths):
     #################################################################
 
     tiny_img_feats = []
+
+    for img_path in img_paths:
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        # img = cv2.GaussianBlur(img, (5, 5), 0)
+        img = cv2.resize(img, (16, 16), interpolation=cv2.INTER_AREA)
+        img = img.flatten()
+        img = img - np.mean(img)
+        img = img / np.linalg.norm(img)
+        tiny_img_feats.append(img)
+
+    tiny_img_feats = np.array(tiny_img_feats)
 
     #################################################################
     #                        END OF YOUR CODE                       #
@@ -99,12 +112,23 @@ def build_vocabulary(img_paths, vocab_size=400):
     # You are welcome to use your own SIFT feature                                   #
     ##################################################################################
 
+    descriptors = []
+    for img_path in tqdm(img_paths):
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        descriptor = dsift(img, step=[4, 4], fast=True)[1]
+        # sample 25% of descriptors
+        indexes = np.random.choice(range(len(descriptor)), int(len(descriptor)*0.3), replace=False)
+        descriptors.append(descriptor[indexes])
+    
+    descriptors = np.vstack(descriptors).astype(np.float32)
+    vocab = kmeans(descriptors, vocab_size)
+
+
     ##################################################################################
     #                                END OF YOUR CODE                                #
     ##################################################################################
     
-    # return vocab
-    return None
+    return vocab
 
 ###### Step 1-b-2
 def get_bags_of_sifts(img_paths, vocab):
@@ -143,6 +167,13 @@ def get_bags_of_sifts(img_paths, vocab):
     ############################################################################
 
     img_feats = []
+    for img_path in tqdm(img_paths):
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        descriptor = dsift(img, step=[4, 4], fast=True)[1]
+        dist = cdist(descriptor, vocab)
+        nearest = np.argmin(dist, axis=1)
+        hist = np.bincount(nearest, minlength=len(vocab))
+        img_feats.append(hist / len(descriptor))
 
     ############################################################################
     #                                END OF YOUR CODE                          #
@@ -202,6 +233,19 @@ def nearest_neighbor_classify(train_img_feats, train_labels, test_img_feats):
     ###########################################################################
 
     test_predicts = []
+    k_nearest = 7
+    p_norm = 1
+
+    
+    dist = cdist(test_img_feats, train_img_feats, 'minkowski', p=p_norm)
+
+
+    for i in range(len(test_img_feats)):
+        nearest = np.argpartition(dist[i], k_nearest)[:k_nearest]
+        labels = [CAT2ID[train_labels[j]] for j in nearest]
+        test_predicts.append(CAT[max(set(labels), key=labels.count)])
+
+
 
     ###########################################################################
     #                               END OF YOUR CODE                          #

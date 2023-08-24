@@ -14,6 +14,8 @@ from utils import set_seed, write_config_log, write_result_log
 
 import config as cfg
 
+from tqdm import tqdm
+
 def plot_learning_curve(logfile_dir, result_lists):
     ################################################################
     # TODO:                                                        #
@@ -33,10 +35,21 @@ def plot_learning_curve(logfile_dir, result_lists):
     # plot being unsaved if early stop, so the result_lists's size #
     # is not fixed.                                                #
     ################################################################
+
+    for key in result_lists.keys():
+        plt.figure()
+        plt.plot(result_lists[key], label=key)
+        plt.xlabel('epoch')
+        plt.ylabel(key.split('_')[1])
+        plt.title(key)
+        plt.savefig(os.path.join(logfile_dir, key+'.png'))
+        plt.close()
+
     
-    pass
 
 def train(model, train_loader, val_loader, logfile_dir, model_save_dir, criterion, optimizer, scheduler, device):
+
+    scaler = torch.cuda.amp.GradScaler()
 
     train_loss_list, val_loss_list = [], []
     train_acc_list, val_acc_list = [], []
@@ -48,19 +61,22 @@ def train(model, train_loader, val_loader, logfile_dir, model_save_dir, criterio
         train_loss = 0.0
         train_correct = 0.0
         model.train()
-        for batch, data in enumerate(train_loader):
-            sys.stdout.write(f'\r[{epoch + 1}/{cfg.epochs}] Train batch: {batch + 1} / {len(train_loader)}')
-            sys.stdout.flush()
+        for data in tqdm(train_loader):
+            # sys.stdout.write(f'\r[{epoch + 1}/{cfg.epochs}] Train batch: {batch + 1} / {len(train_loader)}')
+            # sys.stdout.flush()
+            optimizer.zero_grad()
             # Data loading.
             images, labels = data['images'].to(device), data['labels'].to(device) # (batch_size, 3, 32, 32), (batch_size)
-            # Forward pass. input: (batch_size, 3, 32, 32), output: (batch_size, 10)
-            pred = model(images)
+
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                # Forward pass. input: (batch_size, 3, 32, 32), output: (batch_size, 10)
+                pred = model(images)
             # Calculate loss.
             loss = criterion(pred, labels)
             # Backprop. (update model parameters)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             # Evaluate.
             train_correct += torch.sum(torch.argmax(pred, dim=1) == labels)
             train_loss += loss.item()
@@ -68,7 +84,7 @@ def train(model, train_loader, val_loader, logfile_dir, model_save_dir, criterio
         train_time = time.time() - train_start_time
         train_acc = train_correct / len(train_loader.dataset)
         train_loss /= len(train_loader)
-        train_acc_list.append(train_acc)
+        train_acc_list.append(train_acc.item())
         train_loss_list.append(train_loss)
         print()
         print(f'[{epoch + 1}/{cfg.epochs}] {train_time:.2f} sec(s) Train Acc: {train_acc:.5f} | Train Loss: {train_loss:.5f}')
@@ -88,14 +104,22 @@ def train(model, train_loader, val_loader, logfile_dir, model_save_dir, criterio
             # You don't have to update parameters, just record the      #
             # accuracy and loss.                                        #
             #############################################################
-            
+            for data in tqdm(val_loader):
+                images, labels = data['images'].to(device), data['labels'].to(device) # (batch_size, 3, 32, 32), (batch_size)
+                pred = model(images)
+                loss = criterion(pred, labels)
+
+
+                val_correct += torch.sum(torch.argmax(pred, dim=1) == labels)
+                val_loss += loss.item()
+
             ######################### TODO End ##########################
 
         # Print validation result
         val_time = time.time() - val_start_time
         val_acc = val_correct / len(val_loader.dataset)
         val_loss /= len(val_loader)
-        val_acc_list.append(val_acc)
+        val_acc_list.append(val_acc.item())
         val_loss_list.append(val_loss)
         print()
         print(f'[{epoch + 1}/{cfg.epochs}] {val_time:.2f} sec(s) Val Acc: {val_acc:.5f} | Val Loss: {val_loss:.5f}')
@@ -160,6 +184,10 @@ def main():
     else:
         raise NameError('Unknown model type')
 
+    # try:
+    #     model = torch.compile(model, mode='reduce-overhead')
+    # except:
+    #     pass
     model.to(device)
 
     ##### DATALOADER #####
@@ -170,10 +198,12 @@ def main():
     ##### LOSS & OPTIMIZER #####
     criterion = nn.CrossEntropyLoss()
     if cfg.use_adam:
-        optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
+        # optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=1e-4)
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=cfg.lr, momentum=0.9, weight_decay=1e-6)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.milestones, gamma=0.1)
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.milestones, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, cfg.epochs, eta_min=5e-4)
     
     ##### TRAINING & VALIDATION #####
     ##### TODO: check train() in this file #####
