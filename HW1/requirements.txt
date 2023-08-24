@@ -1,0 +1,4 @@
+# platform: linux-64
+# python3.8
+numpy==1.24.4
+opencv-python==4.8.0.76
